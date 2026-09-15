@@ -11,7 +11,7 @@ st.set_page_config(page_title="Neutrality LRT", layout="wide")
 st.title("Neutrality Test - Donor to Recipient Transmission")
 st.markdown(
     """
-    Test whether each feature (taxon / gene) is **neutral** during transmission:
+    Test whether each feature (taxon / gene / sgRNA) is **neutral** during transmission:
     - **H0**: recipient center frequency = donor frequency
     - **H1**: recipient center frequency is free
     Uses a likelihood-ratio test (LRT) with Dirichlet-Multinomial marginals
@@ -32,7 +32,7 @@ with st.sidebar:
     min_p       = st.number_input("min_p (skip near-zero donor freqs)", value=1e-8, format="%.2e")
     fdr_method  = st.selectbox("FDR method", ["fdr_bh", "fdr_by", "holm", "bonferroni"])
     st.markdown("---")
-    st.markdown("**Input format** - CSV files, columns = samples/recipients, rows = features (taxa / genes).")
+    st.markdown("**Input format** - CSV files, columns = samples/recipients, rows = features (taxa / genes / sgRNAs).")
 
 # -- Data input tabs ----------------------------------------------------------
 tab_upload, tab_demo = st.tabs(["Upload your data", "Run demo"])
@@ -53,7 +53,7 @@ recipient_df = None
 with tab_upload:
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Donor counts")
+        st.subheader("Donor / inoculum counts")
         st.caption("One column of raw counts; one row per feature.")
         donor_file = st.file_uploader("Upload donor CSV", type="csv", key="donor")
         if donor_file:
@@ -140,16 +140,18 @@ if donor_df is not None and recipient_df is not None:
 
         n_tested   = results["pval"].notna().sum()
         n_rejected = results["reject_FDR"].sum()
-        m1, m2, m3 = st.columns(3)
+        n_down     = int((results["direction"] == "down_in_recipient").sum())
+        m1, m2, m3, m4 = st.columns(4)
         m1.metric("Features tested", int(n_tested))
         m2.metric(f"Rejected (FDR {int(fdr_alpha*100)}%)", int(n_rejected))
         m3.metric("Not rejected (neutral)", int(n_tested - n_rejected))
+        m4.metric("down_in_recipient", n_down)
 
         st.subheader("Results table")
         display_cols = ["feature","p_donor","q_hat_recipient_center",
                         "LR","pval","qval_FDR","reject_FDR","direction"]
         styled = results[display_cols].style.format(
-            {"p_donor":"{:.4f}","q_hat_recipient_center":"{:.4f}",
+            {"p_donor":"{:.4e}","q_hat_recipient_center":"{:.4e}",
              "LR":"{:.3f}","pval":"{:.2e}","qval_FDR":"{:.2e}"}
         ).apply(
             lambda col: ["background-color: #ffd6d6" if v else "" for v in col],
@@ -157,57 +159,58 @@ if donor_df is not None and recipient_df is not None:
         )
         st.dataframe(styled, use_container_width=True)
 
-        csv_bytes = results.to_csv(index=False).encode()
-        st.download_button("Download results CSV", csv_bytes,
-                           "neutrality_results.csv", "text/csv")
+        # -- Downloads: full results + down_in_recipient subset ---------------
+        down_df = results[(results["direction"] == "down_in_recipient") & (results["reject_FDR"])].copy()
+        dcol1, dcol2 = st.columns(2)
+        with dcol1:
+            st.download_button(
+                "Download full results CSV",
+                results.to_csv(index=False).encode(),
+                "neutrality_results.csv", "text/csv"
+            )
+        with dcol2:
+            st.download_button(
+                f"Download down_in_recipient ({len(down_df)}) CSV",
+                down_df.to_csv(index=False).encode(),
+                "down_in_recipient.csv", "text/csv"
+            )
+        st.caption("The down_in_recipient file lists only the SIGNIFICANT depletions "
+                   "(reject_FDR = True and recipient frequency below donor frequency), "
+                   "ordered by significance.")
 
-        st.subheader("Visualisations")
-        plot_tab1, plot_tab2, plot_tab3 = st.tabs(
-            ["p-value distribution", "Volcano (LR vs -log10 p)", "Freq shift"]
-        )
+        # -- Single scatter: log2 fold-change vs -log10(p) --------------------
+        st.subheader("log2 fold-change vs significance")
+        eps = 1e-12
+        plot_df = results.dropna(subset=["pval","q_hat_recipient_center","p_donor"]).copy()
+        plot_df["log2_fc"]    = np.log2((plot_df["q_hat_recipient_center"] + eps) / (plot_df["p_donor"] + eps))
+        plot_df["neglog10_p"] = -np.log10(plot_df["pval"])
 
-        with plot_tab1:
-            fig, ax = plt.subplots(figsize=(7, 3))
-            pv = results["pval"].dropna()
-            ax.hist(pv, bins=20, color="steelblue", edgecolor="white")
-            ax.axvline(fdr_alpha, color="red", linestyle="--", label=f"alpha={fdr_alpha}")
-            ax.set_xlabel("p-value"); ax.set_ylabel("Count")
-            ax.set_title("p-value histogram"); ax.legend()
-            plt.tight_layout()
-            st.pyplot(fig, use_container_width=True)
+        # Horizontal guide = FDR significance boundary on the raw-p scale
+        rej = plot_df[plot_df["reject_FDR"]]
+        if len(rej):
+            hline = -np.log10(rej["pval"].max())
+        else:
+            hline = -np.log10(fdr_alpha)
 
-        with plot_tab2:
-            fig, ax = plt.subplots(figsize=(7, 4))
-            sub = results.dropna(subset=["pval","LR"])
-            colors = ["#e74c3c" if r else "#95a5a6" for r in sub["reject_FDR"]]
-            ax.scatter(sub["LR"], -np.log10(sub["pval"]), c=colors, alpha=0.8, edgecolors="none")
-            for _, row in sub[sub["reject_FDR"]].iterrows():
-                ax.annotate(str(row["feature"]), (row["LR"], -np.log10(row["pval"])),
-                            fontsize=7, ha="left", va="bottom")
-            ax.set_xlabel("Likelihood-ratio statistic")
-            ax.set_ylabel("-log10(p-value)")
-            ax.set_title("Volcano plot")
-            from matplotlib.lines import Line2D
-            legend_elements = [
-                Line2D([0],[0], marker="o", color="w", markerfacecolor="#e74c3c", label="Rejected"),
-                Line2D([0],[0], marker="o", color="w", markerfacecolor="#95a5a6", label="Not rejected"),
-            ]
-            ax.legend(handles=legend_elements)
-            plt.tight_layout()
-            st.pyplot(fig, use_container_width=True)
+        fig, ax = plt.subplots(figsize=(6.4, 5))
+        blue = plot_df[~plot_df["reject_FDR"]]
+        red  = plot_df[plot_df["reject_FDR"]]
+        ax.scatter(blue["log2_fc"], blue["neglog10_p"], s=14, c="#3b7fbf", alpha=0.75, edgecolors="none")
+        ax.scatter(red["log2_fc"],  red["neglog10_p"],  s=34, c="#e8261f", alpha=0.95, edgecolors="none")
+        ax.axvline(0.0,   ls="--", lw=1, color="#6b7a99")
+        ax.axhline(hline, ls="--", lw=1, color="#6b7a99")
+        ax.set_xlabel(r"$log_2(\hat{q}_j / D_j)$", fontsize=12)
+        ax.set_ylabel(r"$-log_{10}(p_{FDR})$", fontsize=12)
+        plt.tight_layout()
+        st.pyplot(fig, use_container_width=False)
+        st.caption(f"Red = rejected at FDR {fdr_alpha}. Vertical dashed line: no change "
+                   f"(recipient freq = donor freq). Horizontal dashed line: FDR significance boundary. "
+                   f"Left of centre = depleted in recipients (down_in_recipient).")
 
-        with plot_tab3:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            sub = results.dropna(subset=["q_hat_recipient_center"])
-            x = np.arange(len(sub))
-            ax.bar(x, sub["q_hat_recipient_center"] - sub["p_donor"],
-                   color=["#e74c3c" if r else "#3498db" for r in sub["reject_FDR"]])
-            ax.axhline(0, color="black", linewidth=0.8)
-            ax.set_xticks(x)
-            ax.set_xticklabels(sub["feature"].astype(str), rotation=45, ha="right", fontsize=8)
-            ax.set_ylabel("q_hat - p_donor  (frequency shift)")
-            ax.set_title("Frequency shift per feature (red = rejected)")
-            plt.tight_layout()
-            st.pyplot(fig, use_container_width=True)
+        # optional PNG download of the figure
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=200, bbox_inches="tight")
+        st.download_button("Download scatter (PNG)", buf.getvalue(),
+                           "nonneutral_scatter.png", "image/png")
 else:
     st.info("Upload donor + recipient CSVs, or click Generate demo data to get started.")
