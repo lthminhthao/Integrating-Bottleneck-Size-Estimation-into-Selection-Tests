@@ -9,18 +9,56 @@ from neutrality_test import neutrality_lrt
 from bottleneck_function import bottleneck_from_two_timepoints
 
 st.set_page_config(page_title="Neutrality LRT", layout="wide")
-st.title("Neutrality Test - Donor to Recipient Transmission")
-st.markdown(
-    """
-    Test whether each feature (taxon / gene / sgRNA) is **neutral** during transmission:
-    - **H0**: recipient center frequency = donor frequency
-    - **H1**: recipient center frequency is free
+st.title("Bottleneck Neutrality Test - From Donor to Recipient Diversity "
+         "Accounting for Population Bottleneck")
+st.caption("Software version v1 (September 2026)")
 
-    The bottleneck size **Nb is estimated from the data** for every recipient
-    (Dirichlet-Multinomial MLE from the donor and that recipient's counts),
-    so it is not a manual parameter.
-    """
+st.markdown("**Thi Minh Thao Le and Erida Gjini**")
+
+st.markdown(
+    "Building on existing computational approaches (refs 1-3), we develop a new "
+    "software framework that integrates explicit bottleneck size estimation into "
+    "neutrality testing for biological diversity data. Designed for variant frequency "
+    "datasets, our method accounts for sequencing errors and sampling biases, enabling "
+    "more accurate and interpretable detection of selection signatures. The framework has "
+    "been validated using previously published *Streptococcus pneumoniae* in vivo "
+    "experimental data (Liu et al., ref 2), where it successfully reproduced established "
+    "fitness results while identifying additional genes associated with infection and "
+    "pathogenesis. By explicitly modeling bottleneck effects, the bottleneck-neutrality "
+    "(BN) test refines the identification of candidate genes under selection and helps "
+    "distinguish genetic drift from selection. Its flexible design makes it a robust and "
+    "broadly applicable tool for analyzing evolutionary dynamics across diverse biological "
+    "systems."
 )
+
+st.markdown("For more information on the method see our paper:")
+st.markdown(
+    "Le, TMT, Gjini E. (2026) "
+    "[Integrating Bottleneck Size into Selection Tests for Biological Diversity Data]"
+    "(https://doi.org/10.1101/2026.07.07.737025) bioRxiv 2026.07.07.737025"
+)
+
+st.markdown(
+    "**Funding:** This project has received funding from the European Union's Horizon "
+    "Europe research and innovation programme under grant agreement No 101080528."
+)
+
+with st.expander("References"):
+    st.markdown(
+        "1. Leonard *et al.* (2017). Transmission bottleneck size estimation from pathogen "
+        "deep-sequencing data, with an application to human influenza A virus. "
+        "*Journal of Virology*, 91(14):10-1128.\n\n"
+        "2. Liu *et al.* (2020). Exploration of bacterial bottlenecks and *Streptococcus "
+        "pneumoniae* pathogenesis by CRISPRi-Seq. *Cell Host & Microbe*, 29(1):107-120.\n\n"
+        "3. Krimbas *et al.* (1971). The genetics of *Dacus oleae*. V. Changes of esterase "
+        "polymorphism in a natural population following insecticide control-selection or "
+        "drift? *Evolution*, pages 454-460."
+    )
+
+st.markdown("**Give it a try here in our specially-designed user interface!**")
+st.markdown("You can upload your own data, run a random demo, or run analysis on the "
+            "data used in our paper.")
+st.markdown("---")
 
 with st.sidebar:
     st.header("Parameters")
