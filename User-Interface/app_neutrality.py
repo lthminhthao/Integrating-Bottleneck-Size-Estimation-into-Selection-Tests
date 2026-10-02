@@ -14,6 +14,7 @@ st.set_page_config(page_title="Bottleneck Neutrality Test", layout="wide")
 st.title("Bottleneck Neutrality Test - From Donor to Recipient Diversity "
          "Accounting for Population Bottleneck")
 st.caption("Software version v1 (September 2026)")
+st.caption("This software is licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0).")
 
 st.markdown("**Thi Minh Thao Le and Erida Gjini**")
 
@@ -32,6 +33,7 @@ st.markdown(
     "broadly applicable tool for analyzing evolutionary dynamics across diverse biological "
     "systems."
 )
+
 
 st.markdown("For more information on the method see our paper:")
 st.markdown(
