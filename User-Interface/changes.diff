@@ -1,0 +1,86 @@
+--- original/app_neutrality.py
++++ updated/app_neutrality.py
+@@ -5,8 +5,7 @@
+ matplotlib.use("Agg")
+ import matplotlib.pyplot as plt
+ import streamlit as st
+-from neutrality_test import neutrality_lrt
+-from bottleneck_function import bottleneck_from_two_timepoints
++from neutrality_test_bootstrap import neutrality_bootstrap, bottleneck_from_two_timepoints
+ 
+ st.set_page_config(page_title="Bottleneck Neutrality Test", layout="wide")
+ 
+@@ -69,6 +68,7 @@
+ 
+ with st.sidebar:
+     st.header("Parameters")
++    n_boot = int(st.number_input("Number of bootstrap replicates", min_value=1, value=100, step=100))
+     fdr_alpha   = st.slider("FDR alpha", 0.01, 0.20, 0.05, 0.01)
+     pseudocount = st.number_input("Donor pseudocount", value=1e-6, format="%.2e")
+     min_p       = st.number_input("min_p (skip near-zero donor freqs)", value=1e-8, format="%.2e")
+@@ -179,6 +179,10 @@
+         prog = st.progress(0.0, text="Estimating bottleneck size N_b per recipient ...")
+         for k, name in enumerate(rec_names):
+             x = recipient_df.loc[name].to_numpy()
++            if np.all(x == 0):
++                nb_list.append(np.nan)
++                prog.progress((k + 1) / len(rec_names))
++                continue
+             nb_list.append(bottleneck_from_two_timepoints(
+                 donor_vec, x, donor_pseudocount=pseudocount,
+                 nb_max=nb_max, n_grid=n_grid, refine=refine))
+@@ -186,7 +190,8 @@
+         prog.empty()
+         nb_arr = np.array(nb_list, dtype=float)
+ 
+-        valid = np.isfinite(nb_arr)
++        # Positive infinity is a valid multinomial-limit estimate in the new backend.
++        valid = ~np.isnan(nb_arr)
+         if not valid.all():
+             st.warning(f"{int((~valid).sum())} recipient(s) had zero total counts and were dropped.")
+         recipient_used = recipient_df.loc[valid]
+@@ -196,13 +201,17 @@
+             st.stop()
+ 
+         nb_table = pd.DataFrame({"recipient": list(recipient_used.index),
+-                                 "Nb_hat": nb_used.astype(int)})
+-
+-        with st.spinner("Applying the BN test ..."):
+-            results = neutrality_lrt(
++                                 "Nb_hat": nb_used})
++
++        with st.spinner(f"Applying the BN test ({n_boot} bootstrap replicates) ..."):
++            results, diagnostics = neutrality_bootstrap(
+                 donor_counts=donor_series,
+                 recipient_counts=recipient_used,
+                 bottleneck=nb_used,
++                n_boot=n_boot,
++                reestimate_bottleneck=False,
++                seed=12345,
++                progress_every=0,
+                 pseudocount=pseudocount,
+                 min_p=min_p,
+                 fdr_alpha=fdr_alpha,
+@@ -238,11 +247,12 @@
+         m4.metric("Sig. depleted", n_down_sig)
+ 
+         st.markdown("### 2. Results table for variant frequency changes")
+-        display_cols = ["variant","p_donor","q_hat_recipient_center","LR","pval","qval_FDR","reject_FDR","direction"]
++        display_cols = ["variant","p_donor","q_hat_recipient_center","LR","agreement_LR","direction_agreement","pval","qval_FDR","reject_FDR","direction"]
+         disp = results[display_cols].copy()
+         for c in ["p_donor","q_hat_recipient_center"]:
+             disp[c] = disp[c].map(lambda v: f"{v:.4e}" if pd.notna(v) else "")
+         disp["LR"] = disp["LR"].map(lambda v: f"{v:.3f}" if pd.notna(v) else "")
++        disp["agreement_LR"] = disp["agreement_LR"].map(lambda v: f"{v:.3f}" if pd.notna(v) else "")
+         for c in ["pval","qval_FDR"]:
+             disp[c] = disp[c].map(lambda v: f"{v:.2e}" if pd.notna(v) else "")
+         st.dataframe(disp, use_container_width=True, hide_index=True)
+@@ -274,7 +284,7 @@
+         ax.axvline(0.0, ls="--", lw=1, color="#6b7a99")
+         ax.axhline(hline, ls="--", lw=1, color="#6b7a99")
+         ax.set_xlabel(r"$log_2(\hat{q}_j / D_j)$", fontsize=12)
+-        ax.set_ylabel(r"$-log_{10}(p_{FDR})$", fontsize=12)
++        ax.set_ylabel(r"$-log_{10}(p_{\mathrm{bootstrap}})$", fontsize=12)
+         plt.tight_layout()
+         st.pyplot(fig, use_container_width=False)
+         st.caption(f"Red = selected at FDR {fdr_alpha}. Vertical dashed line: no change. "
