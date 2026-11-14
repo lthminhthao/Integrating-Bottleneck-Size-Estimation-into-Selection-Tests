@@ -1,4 +1,4 @@
-# Original BN-test interface with the new bootstrap function
+# Naive-BN-test interface with the BN test (with bootstrap function)
 
 This package supersedes the previous recreated interface. `app_neutrality.py`
 is based directly on the supplied original app. Its landing text, authors,
