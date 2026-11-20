@@ -1,0 +1,7 @@
+Execution checks passed on this environment:
+- all six scenario designs: five hosts, at most 100 variants, correct mass and truth labels
+- original BN module byte-for-byte unchanged
+- Python and notebook cell syntax
+- end-to-end runs: 10-variant small smoke test, 50-variant null_small, 100-variant power_moderate; each with 200 bootstraps and bottleneck re-estimation
+- outputs finite, complete, and correct shapes
+The full repeated simulation study has NOT been run. These are execution checks, not scientific evidence of calibration or power.
